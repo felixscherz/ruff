@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use lsp_types::request::DocumentDiagnosticRequest;
 use lsp_types::{
-    Diagnostic, DiagnosticSeverity, DiagnosticTag, DocumentDiagnosticParams,
+    CodeDescription, Diagnostic, DiagnosticSeverity, DiagnosticTag, DocumentDiagnosticParams,
     DocumentDiagnosticReport, DocumentDiagnosticReportResult, FullDocumentDiagnosticReport,
     NumberOrString, Range, RelatedFullDocumentDiagnosticReport, Url,
 };
@@ -11,7 +11,7 @@ use crate::document::ToRangeExt;
 use crate::server::api::traits::{BackgroundDocumentRequestHandler, RequestHandler};
 use crate::server::{client::Notifier, Result};
 use crate::session::DocumentSnapshot;
-use ruff_db::diagnostic::Severity;
+use ruff_db::diagnostic::{DiagnosticId, Severity};
 use ruff_db::source::{line_index, source_text};
 use ty_project::{Db, ProjectDatabase};
 
@@ -87,6 +87,19 @@ fn to_lsp_diagnostic(
         Range::default()
     };
 
+    let code_description = match diagnostic.id() {
+        DiagnosticId::Lint(name) => {
+            if let Ok(lint) = db.lint_registry().get(name.as_str()) {
+                let url = lint.code_description();
+                Some(CodeDescription {
+                    href: Url::parse(&url).unwrap(),
+                });
+            }
+            None
+        }
+        _ => None,
+    };
+
     let severity = match diagnostic.severity() {
         Severity::Info => DiagnosticSeverity::INFORMATION,
         Severity::Warning => DiagnosticSeverity::WARNING,
@@ -110,7 +123,7 @@ fn to_lsp_diagnostic(
         severity: Some(severity),
         tags,
         code: Some(NumberOrString::String(diagnostic.id().to_string())),
-        code_description: None,
+        code_description,
         source: Some("ty".into()),
         message: diagnostic.concise_message().to_string(),
         related_information: None,

@@ -130,6 +130,10 @@ impl LintMetadata {
     pub fn line(&self) -> u32 {
         self.line
     }
+
+    pub fn code_description(&self) -> String {
+        format!("https://{}", self.name)
+    }
 }
 
 #[doc(hidden)]
