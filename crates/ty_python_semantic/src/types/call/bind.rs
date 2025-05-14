@@ -1280,20 +1280,33 @@ impl<'db> Binding<'db> {
             parameter_matched[index] = true;
         }
         if let Some(first_excess_argument_index) = first_excess_positional {
-            errors.push(BindingError::TooManyPositionalArguments {
-                first_excess_argument_index: get_argument_index(
-                    first_excess_argument_index,
-                    num_synthetic_args,
-                ),
-                expected_positional_count: parameters
-                    .positional()
-                    .count()
-                    // using saturating_sub to avoid negative values due to invalid syntax in source code
-                    .saturating_sub(num_synthetic_args),
-                provided_positional_count: next_positional
-                    // using saturating_sub to avoid negative values due to invalid syntax in source code
-                    .saturating_sub(num_synthetic_args),
-            });
+            if num_synthetic_args > parameters.len() {
+                errors.push(BindingError::TooManyPositionalArguments {
+                    first_excess_argument_index: get_argument_index(
+                        first_excess_argument_index,
+                        num_synthetic_args,
+                    ),
+                    expected_positional_count: parameters.positional().count(),
+                    provided_positional_count: next_positional,
+                    includes_bound_arguments: true,
+                });
+            } else {
+                errors.push(BindingError::TooManyPositionalArguments {
+                    first_excess_argument_index: get_argument_index(
+                        first_excess_argument_index,
+                        num_synthetic_args,
+                    ),
+                    expected_positional_count: parameters
+                        .positional()
+                        .count()
+                        // using saturating_sub to avoid negative values due to invalid syntax in source code
+                        .saturating_sub(num_synthetic_args),
+                    provided_positional_count: next_positional
+                        // using saturating_sub to avoid negative values due to invalid syntax in source code
+                        .saturating_sub(num_synthetic_args),
+                    includes_bound_arguments: false,
+                });
+            }
         }
         let mut missing = vec![];
         for (index, matched) in parameter_matched.iter().copied().enumerate() {
@@ -1601,6 +1614,7 @@ pub(crate) enum BindingError<'db> {
         first_excess_argument_index: Option<usize>,
         expected_positional_count: usize,
         provided_positional_count: usize,
+        includes_bound_arguments: bool,
     },
     /// Multiple arguments were provided for a single parameter.
     ParameterAlreadyAssigned {
@@ -1672,16 +1686,22 @@ impl<'db> BindingError<'db> {
                 first_excess_argument_index,
                 expected_positional_count,
                 provided_positional_count,
+                includes_bound_arguments,
             } => {
                 let node = Self::get_node(node, *first_excess_argument_index);
                 if let Some(builder) = context.report_lint(&TOO_MANY_POSITIONAL_ARGUMENTS, node) {
                     let mut diag = builder.into_diagnostic(format_args!(
                         "Too many positional arguments{}: expected \
-                        {expected_positional_count}, got {provided_positional_count}",
+                        {expected_positional_count}, got {provided_positional_count}{}",
                         if let Some(CallableDescription { kind, name }) = callable_description {
                             format!(" to {kind} `{name}`")
                         } else {
                             String::new()
+                        },
+                        if *includes_bound_arguments {
+                            " (including `self`)"
+                        } else {
+                            ""
                         }
                     ));
                     if let Some(union_diag) = union_diag {

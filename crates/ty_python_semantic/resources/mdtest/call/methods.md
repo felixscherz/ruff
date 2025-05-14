@@ -74,6 +74,16 @@ C.f(1)  # error: [missing-argument]
 reveal_type(C.f(C(), 1))  # revealed: str
 ```
 
+The method has to define a parameter for the `instance` to be bound to:
+
+```py
+class G:
+    def g() -> str:
+        return "a"
+
+G().g()  # error: "Too many positional arguments to bound method `g`: expected 0, got 1 (including `self`)"
+```
+
 When we access methods from derived classes, they will be bound to instances of the derived class:
 
 ```py
